@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using UserManagementService.Infrastructure.Data;
-using UserManagementService.Infrastructure.Repositories;
 using UserManagementService.Core.Interfaces;
+using UserManagementService.Infrastructure.Repositories;
 using UserManagementService.Application.Services;
+using UserManagementService.Infrastructure.Services;
 using FluentValidation;
 using UserManagementService.Application.DTOs;
 using UserManagementService.Application.Validators;
+using UserManagementService.Core.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,9 +20,17 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<UserManagementDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Register services and validators
+// Register services and repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRepository<User>, UserRepository>(); // Register UserRepository as IRepository<User>
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IEmailService>(provider => new EmailService(
+    builder.Configuration["Email:SmtpHost"],
+    int.Parse(builder.Configuration["Email:SmtpPort"]),
+    builder.Configuration["Email:FromAddress"],
+    builder.Configuration["Email:SmtpUser"],
+    builder.Configuration["Email:SmtpPass"]
+));
 builder.Services.AddScoped<IValidator<CreateUserDto>, CreateUserDtoValidator>();
 builder.Services.AddScoped<IValidator<UpdateUserDto>, UpdateUserDtoValidator>();
 
