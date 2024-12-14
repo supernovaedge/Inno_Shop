@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using UserManagementService.Infrastructure.Data;
 using UserManagementService.Core.Interfaces;
@@ -31,8 +34,29 @@ builder.Services.AddScoped<IEmailService>(provider => new EmailService(
     builder.Configuration["Email:SmtpUser"],
     builder.Configuration["Email:SmtpPass"]
 ));
+builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IValidator<CreateUserDto>, CreateUserDtoValidator>();
 builder.Services.AddScoped<IValidator<UpdateUserDto>, UpdateUserDtoValidator>();
+
+// Configure JWT Authentication
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+    };
+});
 
 var app = builder.Build();
 
@@ -45,6 +69,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
