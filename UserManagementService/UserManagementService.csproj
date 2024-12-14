@@ -28,6 +28,7 @@
     <Folder Include="Infrastructure\Auth\" />  
     <Folder Include="Infrastructure\Email\" />  
     <Folder Include="Infrastructure\Data\" />  
+    <Folder Include="Infrastructure\Services\" />  
     <Folder Include="Infrastructure\Repositories\" />  
   </ItemGroup>  
 
