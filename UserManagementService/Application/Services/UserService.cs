@@ -3,20 +3,23 @@ using UserManagementService.Core.Interfaces;
 using UserManagementService.Core.Specifications;
 using UserManagementService.Application.DTOs;
 using UserManagementService.Application.Utilities;
+using FluentValidation;
 
 namespace UserManagementService.Application.Services
 {
     public class UserService : IUserService
     {
         private readonly IUserRepository _userRepository;
-        private readonly UniqueEmailSpecification _uniqueEmailSpecification;
-        private readonly PasswordStrengthSpecification _passwordStrengthSpecification;
+        private readonly IEmailService _emailService;
+        private readonly IValidator<CreateUserDto> _createUserDtoValidator;
+        private readonly IValidator<UpdateUserDto> _updateUserDtoValidator;
 
-        public UserService(IUserRepository userRepository)
+        public UserService(IUserRepository userRepository, IEmailService emailService, IValidator<CreateUserDto> createUserDtoValidator, IValidator<UpdateUserDto> updateUserDtoValidator)
         {
             _userRepository = userRepository;
-            _uniqueEmailSpecification = new UniqueEmailSpecification(userRepository);
-            _passwordStrengthSpecification = new PasswordStrengthSpecification();
+            _emailService = emailService;
+            _createUserDtoValidator = createUserDtoValidator;
+            _updateUserDtoValidator = updateUserDtoValidator;
         }
 
         public async Task<User?> GetUserByIdAsync(Guid id)
@@ -36,14 +39,10 @@ namespace UserManagementService.Application.Services
 
         public async Task CreateUserAsync(CreateUserDto createUserDto)
         {
-            if (!await _uniqueEmailSpecification.IsSatisfiedByAsync(createUserDto.Email))
+            var validationResult = await _createUserDtoValidator.ValidateAsync(createUserDto);
+            if (!validationResult.IsValid)
             {
-                throw new Exception("Email is already in use.");
-            }
-
-            if (!_passwordStrengthSpecification.IsSatisfiedBy(createUserDto.Password))
-            {
-                throw new Exception("Password does not meet strength requirements.");
+                throw new ValidationException(validationResult.Errors);
             }
 
             var user = new User
@@ -59,10 +58,21 @@ namespace UserManagementService.Application.Services
             };
 
             await _userRepository.AddAsync(user);
+
+            // Send confirmation email
+            var confirmationLink = $"https://yourapp.com/confirm-email?userId={user.Id}";
+            var emailBody = $"Please confirm your email by clicking <a href=\"{confirmationLink}\">here</a>.";
+            await _emailService.SendEmailAsync(user.Email, "Confirm your email", emailBody);
         }
 
         public async Task UpdateUserAsync(Guid id, UpdateUserDto updateUserDto)
         {
+            var validationResult = await _updateUserDtoValidator.ValidateAsync(updateUserDto);
+            if (!validationResult.IsValid)
+            {
+                throw new ValidationException(validationResult.Errors);
+            }
+
             var user = await _userRepository.GetByIdAsync(id);
             if (user == null)
             {
@@ -96,39 +106,28 @@ namespace UserManagementService.Application.Services
 
         public async Task CreateUserAsync(User user)
         {
-            if (!await _uniqueEmailSpecification.IsSatisfiedByAsync(user.Email))
+            var createUserDto = new CreateUserDto
             {
-                throw new Exception("Email is already in use.");
-            }
+                UserName = user.UserName,
+                Email = user.Email,
+                Password = user.PasswordHash, // Assuming PasswordHash is the plain password here
+                Role = user.Role
+            };
 
-            if (!_passwordStrengthSpecification.IsSatisfiedBy(user.PasswordHash))
-            {
-                throw new Exception("Password does not meet strength requirements.");
-            }
-
-            user.Id = Guid.NewGuid();
-            user.PasswordHash = PasswordHasher.HashPassword(user.PasswordHash);
-            user.CreatedAt = DateTime.UtcNow;
-            user.UpdatedAt = DateTime.UtcNow;
-
-            await _userRepository.AddAsync(user);
+            await CreateUserAsync(createUserDto);
         }
 
         public async Task UpdateUserAsync(User user)
         {
-            var existingUser = await _userRepository.GetByIdAsync(user.Id);
-            if (existingUser == null)
+            var updateUserDto = new UpdateUserDto
             {
-                throw new Exception("User not found.");
-            }
+                UserName = user.UserName,
+                Email = user.Email,
+                Role = user.Role,
+                IsEmailConfirmed = user.IsEmailConfirmed
+            };
 
-            existingUser.UserName = user.UserName;
-            existingUser.Email = user.Email;
-            existingUser.Role = user.Role;
-            existingUser.IsEmailConfirmed = user.IsEmailConfirmed;
-            existingUser.UpdatedAt = DateTime.UtcNow;
-
-            await _userRepository.UpdateAsync(existingUser);
+            await UpdateUserAsync(user.Id, updateUserDto);
         }
     }
 }
